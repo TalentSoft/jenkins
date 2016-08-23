@@ -35,9 +35,9 @@ THE SOFTWARE.
 -->
 <service>
   <id><%= @new_resource.service_name %></id>
-  <name>Jenkins Slave</name>
+  <name>Jenkins Slave (<%= @new_resource.service_name %>)</name>
   <description>This service runs a slave for Jenkins continuous integration system.
-(Installed by Chef)
+(Installed by Chef for (<%= @new_resource.service_name %>))
   </description>
   <!--
     if you'd like to run Jenkins with a specific version of Java, specify a full path to java.exe.

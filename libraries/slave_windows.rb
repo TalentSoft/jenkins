@@ -22,6 +22,11 @@
 require_relative '_params_validate'
 require_relative 'slave'
 require_relative 'slave_jnlp'
+if RUBY_PLATFORM =~ /mswin|mingw32|windows/
+  require 'chef/win32/error'
+  require 'win32/service'
+end
+
 
 class Chef
   class Resource::JenkinsWindowsSlave < Resource::JenkinsJNLPSlave
@@ -80,7 +85,12 @@ class Chef
       # The jenkins-slave.exe is needed to get the slave up and running under a windows service.
       # However, once it is created Jenkins Master wants to control the version.  So we should only
       # create the file if it is missing.
-      slave_exe_resource.run_action(:create_if_missing)
+      
+      if ::Win32::Service.exists?(@new_resource.service_name) && service_resource.current_value.running
+        slave_exe_resource.run_action(:create_if_missing)
+      else
+        slave_exe_resource.run_action(:create)
+      end
 
       slave_compat_xml.run_action(:create)
       slave_bat_resource.run_action(:create)
@@ -110,7 +120,11 @@ class Chef
       return @remote_fs_dir_resource if @remote_fs_dir_resource
       @remote_fs_dir_resource = Chef::Resource::Directory.new(new_resource.remote_fs, run_context)
       user_parts = user_hash
-      @remote_fs_dir_resource.rights(:full_control, user_parts['username'])
+      if (user_parts['domain'] == '.')
+        @remote_fs_dir_resource.rights(:full_control, user_parts['username'])
+      else
+        @remote_fs_dir_resource.rights(:full_control, new_resource.user)
+      end
       @remote_fs_dir_resource.recursive(true)
       @remote_fs_dir_resource
     end
