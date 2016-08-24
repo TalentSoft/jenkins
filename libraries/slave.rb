@@ -34,7 +34,7 @@ class Chef
     self.resource_name = :jenkins_slave
 
     # Actions
-    actions :create, :delete, :connect, :disconnect, :online, :offline
+    actions :create, :delete, :connect, :disconnect, :online, :offline, :offlinewait
     default_action :create
 
     # Attributes
@@ -267,6 +267,27 @@ class Chef
       end
     end
 
+    def action_offlinewait
+      if current_resource.online?
+        converge_by("Offline #{new_resource}") do
+          command_pieces  = [escape(new_resource.slave_name)]
+          if new_resource.offline_reason
+            command_pieces << "-m '#{escape(new_resource.offline_reason)}'"
+          end
+          executor.execute!('offline-node', command_pieces)
+        end
+      end
+      converge_by("Waiting for #{new_resource} becoming idle") do
+        loop do
+          info = slave_info(new_resource.slave_name)
+          break if !info || info[:idle]
+          Chef::Log.info("#{new_resource} still working, waiting 1 minutes")
+          sleep(60)
+        end
+        Chef::Log.info("#{new_resource} now idle")
+      end
+    end
+
     protected
 
     #
@@ -367,6 +388,42 @@ class Chef
       # empty string! :( Let's ensure we convert back to nil.
       @current_slave = convert_blank_values_to_nil(@current_slave)
     end
+
+    def slave_info(node_name)
+        json = executor.groovy! <<-EOH
+            import hudson.model.*
+            import hudson.slaves.*
+            import jenkins.model.*
+            import jenkins.slaves.*
+
+            slave = Jenkins.instance.getNode('#{node_name}') as Slave
+
+            if(slave == null) {
+                return null
+            }
+
+            current_slave = [
+                name:slave.name,
+                description:slave.nodeDescription,
+                remote_fs:slave.remoteFS,
+                executors:slave.numExecutors.toInteger(),
+                usage_mode:slave.mode.toString().toLowerCase(),
+                labels:slave.labelString.split().sort(),
+                connected:(slave.computer.connectTime > 0),
+                online:slave.computer.online,
+                idle: slave.computer.isIdle()
+            ]
+            builder = new groovy.json.JsonBuilder(current_slave)
+            println(builder)
+            EOH
+
+        return nil if json.nil? || json.empty?
+
+        data = JSON.parse(json, symbolize_names: true)
+        data = convert_blank_values_to_nil(data)
+        return data
+    end
+
 
     #
     # Helper method for determining if the given JSON is in sync with the
