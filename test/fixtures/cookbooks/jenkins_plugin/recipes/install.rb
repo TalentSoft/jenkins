@@ -1,4 +1,4 @@
-include_recipe 'jenkins::master'
+include_recipe 'jenkins_server_wrapper::default'
 
 # Test basic plugin installation
 jenkins_plugin 'greenballs'
@@ -27,5 +27,5 @@ end
 jenkins_plugin 'build-monitor-plugin' do
   version '1.6+build.135'
   install_deps true
-  notifies :restart, 'service[jenkins]'
+  notifies :restart, 'service[jenkins]', :immediately
 end

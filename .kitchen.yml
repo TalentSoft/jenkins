@@ -12,8 +12,7 @@ driver:
 
 provisioner:
   name: chef_zero
-  require_chef_omnibus: 12.3.0
-  data_path: test/shared
+  data_path: test/fixtures/keys
   data_bags_path: test/fixtures/data_bags
   attributes:
     jenkins:
@@ -23,34 +22,30 @@ provisioner:
         mirror: http://mirrors.jenkins-ci.org
 
 platforms:
-  - name: ubuntu-12.04
-    run_list:
-      - apt::default
-      - jenkins::java
-  - name: centos-6.6
-    run_list:
-      - yum::default
-      - jenkins::java
+  - name: ubuntu-14.04
+  - name: ubuntu-16.04
+  - name: centos-6.8
+  - name: centos-7.2
 
 suites:
   #
   # Smoke suite
   #
   - name: smoke_package_latest
-    run_list: smoke::default
+    run_list: jenkins_server_wrapper::default
     attributes:
       jenkins:
         master:
           install_method: package
   - name: smoke_war_stable
-    run_list: smoke::default
+    run_list: jenkins_server_wrapper::default
     attributes:
       jenkins:
         master:
           install_method: war
           source: http://mirrors.jenkins-ci.org/war-stable/latest/jenkins.war
   - name: smoke_war_latest
-    run_list: smoke::default
+    run_list: jenkins_server_wrapper::default
     attributes:
       jenkins:
         master:
@@ -61,9 +56,9 @@ suites:
   # Authentication suites
   #
   - name: authentication_private_key
-    run_list: authentication::private_key
+    run_list: jenkins_authentication::private_key
   - name: authentication_username_password
-    run_list: authentication::username_password
+    run_list: jenkins_authentication::username_password
 
   #
   # Command suites
@@ -92,6 +87,8 @@ suites:
     run_list: jenkins_job::disable
   - name: jenkins_job_enable
     run_list: jenkins_job::enable
+  - name: jenkins_job_build
+    run_list: jenkins_job::build
 
   #
   # Script suites

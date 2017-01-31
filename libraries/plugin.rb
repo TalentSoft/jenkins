@@ -1,11 +1,11 @@
 #
-# Cookbook Name:: jenkins
+# Cookbook:: jenkins
 # HWRP:: plugin
 #
 # Author:: Seth Vargo <sethvargo@gmail.com>
 # Author:: Seth Chisamore <schisamo@chef.io>
 #
-# Copyright 2013-2014, Chef Software, Inc.
+# Copyright:: 2013-2016, Chef Software, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,16 +23,13 @@
 require 'digest'
 
 require_relative '_helper'
-require_relative '_params_validate'
 
 class Chef
   class Resource::JenkinsPlugin < Resource::LWRPBase
+    resource_name :jenkins_plugin
+
     # Chef attributes
     identity_attr :name
-    provides :jenkins_plugin
-
-    # Set the resource name
-    self.resource_name = :jenkins_plugin
 
     # Actions
     actions :install, :uninstall, :enable, :disable
@@ -69,6 +66,11 @@ end
 
 class Chef
   class Provider::JenkinsPlugin < Provider::LWRPBase
+    use_inline_resources
+    include Jenkins::Helper
+
+    provides :jenkins_plugin
+
     class PluginNotInstalled < StandardError
       def initialize(plugin, action)
         super <<-EOH
@@ -77,8 +79,6 @@ The Jenkins plugin `#{plugin}' is not installed. In order to #{action}
 EOH
       end
     end
-
-    include Jenkins::Helper
 
     def load_current_resource
       @current_resource ||= Resource::JenkinsPlugin.new(new_resource.name)
@@ -104,7 +104,7 @@ EOH
       true
     end
 
-    action(:install) do
+    action :install do
       # This block stores the actual command to execute, since its the same
       # for upgrades and installs.
       install_block = proc do
@@ -117,14 +117,14 @@ EOH
             new_resource.source,
             new_resource.name,
             nil,
-            cli_opts: new_resource.options,
+            cli_opts: new_resource.options
           )
         else
           install_plugin_from_update_center(
             new_resource.name,
             new_resource.version,
             cli_opts: new_resource.options,
-            install_deps: new_resource.install_deps,
+            install_deps: new_resource.install_deps
           )
         end
       end
@@ -139,7 +139,7 @@ EOH
 
       if current_resource.installed?
         if plugin_version(current_resource.version) == desired_version
-          Chef::Log.debug("#{new_resource} version #{current_resource.version} already installed - skipping")
+          Chef::Log.info("#{new_resource} version #{current_resource.version} already installed - skipping")
         else
           current_version = plugin_version(current_resource.version)
 
@@ -168,9 +168,9 @@ EOH
     # Plugins that are disabled can be re-enabled from the UI (or by removing
     # *.jpi.disabled file from the disk.)
     #
-    action(:disable) do
+    action :disable do
       unless current_resource.installed?
-        fail PluginNotInstalled.new(new_resource.name, :disable)
+        raise PluginNotInstalled.new(new_resource.name, :disable)
       end
 
       disabled = "#{plugin_file(new_resource.name)}.disabled"
@@ -192,9 +192,9 @@ EOH
     #
     # Plugins may be disabled by re-adding the +.jpi.disabled+ plugin.
     #
-    action(:enable) do
+    action :enable do
       unless current_resource.installed?
-        fail PluginNotInstalled.new(new_resource.name, :enable)
+        raise PluginNotInstalled.new(new_resource.name, :enable)
       end
 
       disabled = "#{plugin_file(new_resource.name)}.disabled"
@@ -224,7 +224,7 @@ EOH
     # those configurations that it didn't understand, and pretend as if it
     # didn't see such a fragment.
     #
-    action(:uninstall) do
+    action :uninstall do
       if current_resource.installed?
         converge_by("Uninstall #{new_resource}") do
           uninstall_plugin(new_resource.name)
@@ -263,7 +263,7 @@ EOH
 
       # Compute some versions; Parse them as `Gem::Version` instances for easy
       # comparisons.
-      latest_version    = plugin_version(remote_plugin_data['version'])
+      latest_version = plugin_version(remote_plugin_data['version'])
 
       # Brute-force install all dependencies
       if opts[:install_deps] && remote_plugin_data['dependencies'].any?
@@ -274,9 +274,9 @@ EOH
           if plugin_installation_manifest(dep['name'])
             Chef::Log.debug "A version of dependency #{dep['name']} is already installed - skipping"
             next
-          else
+          elsif dep['optional'] == false
             # only install required dependencies
-            install_plugin_from_update_center(dep['name'], dep['version'], opts) if dep['optional'] == false
+            install_plugin_from_update_center(dep['name'], dep['version'], opts)
           end
         end
       end
@@ -395,7 +395,7 @@ EOH
           #   Plugin-Version: 1.4
           #
           config, value = line.split(/:\s/, 2)
-          config = config.gsub('-', '_').downcase
+          config = config.tr('-', '_').downcase
           value = value.strip if value # remove trailing \r\n
 
           plugin_manifest[config] = value
@@ -408,7 +408,7 @@ EOH
     #
     # Return whether plugin should be upgraded to desired version
     # (i.e. that current < desired).
-    # https://github.com/opscode-cookbooks/jenkins/issues/380
+    # https://github.com/chef-cookbooks/jenkins/issues/380
     # If only one of the two versions is a Gem::Version, we
     # fallback to String comparison.
     #
@@ -442,5 +442,5 @@ end
 
 Chef::Platform.set(
   resource: :jenkins_plugin,
-  provider: Chef::Provider::JenkinsPlugin,
+  provider: Chef::Provider::JenkinsPlugin
 )

@@ -1,10 +1,10 @@
 #
-# Cookbook Name:: jenkins
+# Cookbook:: jenkins
 # HWRP:: user
 #
 # Author:: Seth Vargo <sethvargo@gmail.com>
 #
-# Copyright 2013-2014, Chef Software, Inc.
+# Copyright:: 2013-2016, Chef Software, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,17 +19,16 @@
 # limitations under the License.
 #
 
+require 'json'
+
 require_relative '_helper'
-require_relative '_params_validate'
 
 class Chef
   class Resource::JenkinsUser < Resource::LWRPBase
+    resource_name :jenkins_user
+
     # Chef attributes
     identity_attr :id
-    provides :jenkins_user
-
-    # Set the resource name
-    self.resource_name = :jenkins_user
 
     # Actions
     actions :create, :delete
@@ -65,8 +64,10 @@ end
 
 class Chef
   class Provider::JenkinsUser < Provider::LWRPBase
-    require 'json'
+    use_inline_resources
     include Jenkins::Helper
+
+    provides :jenkins_user
 
     def load_current_resource
       @current_resource ||= Resource::JenkinsUser.new(new_resource.id)
@@ -81,24 +82,30 @@ class Chef
       @current_resource
     end
 
+    #
+    # This provider supports why-run mode.
+    #
     def whyrun_supported?
       true
     end
 
-    action(:create) do
+    action :create do
       if current_resource.exists? &&
          current_resource.full_name == new_resource.full_name &&
          current_resource.email == new_resource.email &&
          current_resource.public_keys == new_resource.public_keys
-        Chef::Log.debug("#{new_resource} exists - skipping")
+        Chef::Log.info("#{new_resource} exists - skipping")
       else
         converge_by("Create #{new_resource}") do
           executor.groovy! <<-EOH.gsub(/ ^{12}/, '')
             user = hudson.model.User.get('#{new_resource.id}')
             user.setFullName('#{new_resource.full_name}')
 
-            email = new hudson.tasks.Mailer.UserProperty('#{new_resource.email}')
-            user.addProperty(email)
+            if (jenkins.model.Jenkins.instance.pluginManager.getPlugin('mailer')) {
+              propertyClass = this.class.classLoader.loadClass('hudson.tasks.Mailer$UserProperty')
+              email = propertyClass.newInstance('#{new_resource.email}')
+              user.addProperty(email)
+            }
 
             password = hudson.security.HudsonPrivateSecurityRealm.Details.fromPlainPassword('#{new_resource.password}')
             user.addProperty(password)
@@ -112,7 +119,7 @@ class Chef
       end
     end
 
-    action(:delete) do
+    action :delete do
       if current_resource.exists?
         converge_by("Delete #{new_resource}") do
           executor.groovy! <<-EOH.gsub(/^ {12}/, '')
@@ -178,5 +185,5 @@ end
 
 Chef::Platform.set(
   resource: :jenkins_user,
-  provider: Chef::Provider::JenkinsUser,
+  provider: Chef::Provider::JenkinsUser
 )
